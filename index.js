@@ -24,14 +24,6 @@ const UserSchema = new Schema({
   username: String,
 });
 
-const ExerciseScema = new Schema({
-  username: String,
-  description: String,
-  duration: Number,
-  date: String,
-  _id: String,
-});
-
 const LogSchema = new Schema({
   username: String,
   count: Number,
@@ -46,7 +38,6 @@ const LogSchema = new Schema({
 });
 
 //mongoose models
-const ExerciseModel = new Model("Exercise", ExerciseScema);
 const UserModel = new Model("User", UserSchema);
 const LogModel = new Model("Log", LogSchema);
 
@@ -59,9 +50,12 @@ app.get("/", async (req, res) => {
 //create user route
 app.post("/api/users", async (req, res) => {
   //check to find user doc
-  const findUserDocument = await UserModel.findOne({
-    username: req.body.username,
-  });
+  const findUserDocument = await UserModel.findOne(
+    {
+      username: req.body.username,
+    },
+    "username"
+  );
   //if exists, return doc, else generate new doc
   if (findUserDocument) {
     res.json(findUserDocument);
@@ -87,37 +81,60 @@ app.get("/api/users", async (req, res) => {
 
 //add exercise route
 app.post("/api/users/:_id/exercises", async (req, res) => {
-  //check if date is empty
-  
   //create var for user document, response, and user log document
-  const userDocument = await UserModel.findById(req.params._id, "username _id");
-  const response = new ExerciseModel({
-    _id: userDocument._id,
+  const userDocument = await UserModel.findOne(
+    { _id: req.params._id },
+    "username _id"
+  );
+  const date = req.body.date
+    ? new Date(req.body.date.split("-")).toDateString()
+    : new Date().toDateString();
+  const response = {
     username: userDocument.username,
     description: req.body.description,
-    duration: req.body.duration,
-    date: req.body.date,
-  });
-  const userLog = await LogModel.findByIdAndUpdate(
-    req.params._id,
+    duration: Number(req.body.duration),
+    _id: req.params._id,
+    date: date,
+  };
+  const userLog = await LogModel.findOneAndUpdate(
+    { _id: req.params._id },
     "_id username count log"
   );
   userLog.log.push({
     description: req.body.description,
     duration: req.body.duration,
-    date: req.body.date,
+    date: date,
   });
   userLog.count += 1;
   await userLog.save();
-  await response.save();
   res.json(response);
 });
 
 //retrieve exercise log route
-app.get("/api/users/:_id/log", async (req, res) => {
+app.get("/api/users/:_id/logs", async (req, res) => {
   //return log based on _id in request
-  const userLog = await LogModel.findById(req.params._id);
-  res.json(userLog);
+  const logDocument = await LogModel.findOne(
+    { _id: req.params._id },
+    "_id username count log"
+  );
+  console.log(req.query)
+  if (req.query.from && req.query.to) {
+    const filteredLog = logDocument.log.filter(log => {
+      const date = new Date(log.date)
+      const dateTo = new Date(req.query.to)
+      const dateFrom = new Date(req.query.from)
+      return date > dateFrom && date < dateTo
+    })
+    logDocument.log = filteredLog
+  }
+  
+  if (req.query.limit) {
+    const copy = logDocument.log
+    logDocument.log = copy.splice(0, req.query.limit)
+  }
+
+  console.log(logDocument)
+  res.json(logDocument);
 });
 
 //port listener
